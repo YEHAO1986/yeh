@@ -1,0 +1,839 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>我的个人主页</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdn.jsdelivr.net/npm/font-awesome@4.7.0/css/font-awesome.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.8/dist/chart.umd.min.js"></script>
+    <!-- 天气API需要的jQuery -->
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+    
+    <!-- Tailwind 配置 -->
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        primary: '#4F46E5',
+                        secondary: '#10B981',
+                        accent: '#F59E0B',
+                        neutral: '#6B7280',
+                        light: '#F3F4F6',
+                        dark: '#1F2937'
+                    },
+                    fontFamily: {
+                        sans: ['Inter', 'system-ui', 'sans-serif'],
+                    },
+                }
+            }
+        }
+    </script>
+    
+    <style type="text/tailwindcss">
+        @layer utilities {
+            .content-auto {
+                content-visibility: auto;
+            }
+            .card-shadow {
+                box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+            }
+            .calendar-day {
+                aspect-ratio: 1/1;
+            }
+            .active-tab {
+                border-bottom: 3px solid theme('colors.primary');
+                color: theme('colors.primary');
+                font-weight: 600;
+            }
+        }
+    </style>
+</head>
+<body class="bg-gray-50 font-sans text-dark">
+    <!-- 顶部导航栏 -->
+    <header class="bg-white card-shadow sticky top-0 z-50">
+        <div class="container mx-auto px-4 py-3 flex items-center justify-between">
+            <div class="flex items-center gap-2">
+                <div class="w-10 h-10 rounded-full bg-primary flex items-center justify-center text-white">
+                    <i class="fa fa-user"></i>
+                </div>
+                <h1 class="text-xl font-bold">我的个人空间</h1>
+            </div>
+            
+            <nav class="hidden md:flex items-center gap-6">
+                <a href="#calendar" class="nav-tab active-tab py-2 px-1">日历</a>
+                <a href="#checkin" class="nav-tab py-2 px-1">打卡</a>
+                <a href="#diary" class="nav-tab py-2 px-1">日记</a>
+                <a href="#weather" class="nav-tab py-2 px-1">天气</a>
+                <a href="#favorites" class="nav-tab py-2 px-1">收藏</a>
+            </nav>
+            
+            <button class="md:hidden text-xl" id="mobileMenuBtn">
+                <i class="fa fa-bars"></i>
+            </button>
+        </div>
+        
+        <!-- 移动端菜单 -->
+        <div id="mobileMenu" class="md:hidden hidden bg-white px-4 py-2 card-shadow">
+            <nav class="flex flex-col gap-3 py-2">
+                <a href="#calendar" class="py-2 px-1 active-tab">日历</a>
+                <a href="#checkin" class="py-2 px-1">打卡</a>
+                <a href="#diary" class="py-2 px-1">日记</a>
+                <a href="#weather" class="py-2 px-1">天气</a>
+                <a href="#favorites" class="py-2 px-1">收藏</a>
+            </nav>
+        </div>
+    </header>
+
+    <main class="container mx-auto px-4 py-8">
+        <!-- 欢迎区域 -->
+        <section class="mb-8 bg-gradient-to-r from-primary/90 to-primary rounded-xl p-6 text-white">
+            <div class="flex flex-col md:flex-row justify-between items-center">
+                <div>
+                    <h2 class="text-2xl md:text-3xl font-bold mb-2">你好，欢迎回来！</h2>
+                    <p class="text-white/90 mb-4" id="welcomeText">今天是美好的一天，开始记录你的生活吧</p>
+                    <div class="flex gap-3">
+                        <button class="bg-white text-primary px-4 py-2 rounded-lg font-medium hover:bg-gray-100 transition">
+                            <i class="fa fa-plus mr-1"></i> 新建日记
+                        </button>
+                        <button class="bg-transparent border border-white text-white px-4 py-2 rounded-lg font-medium hover:bg-white/10 transition">
+                            <i class="fa fa-calendar-check-o mr-1"></i> 今日打卡
+                        </button>
+                    </div>
+                </div>
+                <div class="mt-6 md:mt-0 text-center">
+                    <div class="text-4xl md:text-5xl font-bold" id="currentDate">2026-03-13</div>
+                    <div class="text-lg mt-1" id="currentWeekday">星期五</div>
+                </div>
+            </div>
+        </section>
+
+        <!-- 主要内容区域 -->
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <!-- 左侧区域 (日历 + 打卡) -->
+            <div class="lg:col-span-2">
+                <!-- 日历模块 -->
+                <section id="calendar" class="bg-white rounded-xl card-shadow p-6 mb-6">
+                    <div class="flex justify-between items-center mb-6">
+                        <h3 class="text-xl font-bold flex items-center">
+                            <i class="fa fa-calendar text-primary mr-2"></i> 日历
+                        </h3>
+                        <div class="flex gap-2">
+                            <button id="prevMonth" class="p-2 rounded hover:bg-gray-100">
+                                <i class="fa fa-chevron-left"></i>
+                            </button>
+                            <h4 id="calendarTitle" class="font-medium">2026年3月</h4>
+                            <button id="nextMonth" class="p-2 rounded hover:bg-gray-100">
+                                <i class="fa fa-chevron-right"></i>
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <!-- 日历头部 -->
+                    <div class="grid grid-cols-7 mb-2 text-center font-medium text-neutral">
+                        <div>日</div>
+                        <div>一</div>
+                        <div>二</div>
+                        <div>三</div>
+                        <div>四</div>
+                        <div>五</div>
+                        <div>六</div>
+                    </div>
+                    
+                    <!-- 日历主体 -->
+                    <div id="calendarGrid" class="grid grid-cols-7 gap-1">
+                        <!-- 日历日期会通过JS动态生成 -->
+                    </div>
+                </section>
+
+                <!-- 打卡模块 -->
+                <section id="checkin" class="bg-white rounded-xl card-shadow p-6 mb-6">
+                    <div class="flex justify-between items-center mb-6">
+                        <h3 class="text-xl font-bold flex items-center">
+                            <i class="fa fa-check-square-o text-secondary mr-2"></i> 打卡
+                        </h3>
+                        <button id="addCheckinGoal" class="text-primary hover:text-primary/80 flex items-center">
+                            <i class="fa fa-plus-circle mr-1"></i> 添加目标
+                        </button>
+                    </div>
+                    
+                    <!-- 打卡统计 -->
+                    <div class="mb-6">
+                        <canvas id="checkinChart" height="180"></canvas>
+                    </div>
+                    
+                    <!-- 打卡目标列表 -->
+                    <div id="checkinGoalsList">
+                        <div class="flex items-center justify-between p-3 border-b border-gray-100">
+                            <div class="flex items-center">
+                                <input type="checkbox" class="checkin-checkbox w-5 h-5 rounded text-secondary" checked>
+                                <span class="ml-3">每日阅读30分钟</span>
+                            </div>
+                            <div class="flex items-center gap-2">
+                                <span class="text-sm text-neutral">连续打卡: 7天</span>
+                                <button class="text-neutral hover:text-red-500">
+                                    <i class="fa fa-trash-o"></i>
+                                </button>
+                            </div>
+                        </div>
+                        <div class="flex items-center justify-between p-3 border-b border-gray-100">
+                            <div class="flex items-center">
+                                <input type="checkbox" class="checkin-checkbox w-5 h-5 rounded text-secondary">
+                                <span class="ml-3">每日运动1小时</span>
+                            </div>
+                            <div class="flex items-center gap-2">
+                                <span class="text-sm text-neutral">连续打卡: 0天</span>
+                                <button class="text-neutral hover:text-red-500">
+                                    <i class="fa fa-trash-o"></i>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- 日记模块 -->
+                <section id="diary" class="bg-white rounded-xl card-shadow p-6">
+                    <div class="flex justify-between items-center mb-6">
+                        <h3 class="text-xl font-bold flex items-center">
+                            <i class="fa fa-book text-accent mr-2"></i> 日记
+                        </h3>
+                        <button id="newDiaryBtn" class="bg-accent text-white px-4 py-2 rounded-lg hover:bg-accent/90 transition">
+                            <i class="fa fa-pencil mr-1"></i> 写日记
+                        </button>
+                    </div>
+                    
+                    <!-- 日记列表 -->
+                    <div id="diaryList" class="space-y-4">
+                        <div class="p-4 border border-gray-100 rounded-lg hover:shadow-md transition">
+                            <div class="flex justify-between items-center mb-2">
+                                <h4 class="font-medium">春日郊游</h4>
+                                <span class="text-sm text-neutral">2026-03-10</span>
+                            </div>
+                            <p class="text-neutral line-clamp-2">今天和朋友们一起去郊外踏青，天气非常好，看到了盛开的油菜花，心情格外舒畅...</p>
+                            <button class="mt-2 text-primary text-sm">查看全文 <i class="fa fa-angle-right"></i></button>
+                        </div>
+                        <div class="p-4 border border-gray-100 rounded-lg hover:shadow-md transition">
+                            <div class="flex justify-between items-center mb-2">
+                                <h4 class="font-medium">学习JavaScript笔记</h4>
+                                <span class="text-sm text-neutral">2026-03-08</span>
+                            </div>
+                            <p class="text-neutral line-clamp-2">今天学习了ES6的新特性，包括箭头函数、解构赋值和Promise，这些特性让代码更加简洁...</p>
+                            <button class="mt-2 text-primary text-sm">查看全文 <i class="fa fa-angle-right"></i></button>
+                        </div>
+                    </div>
+                </section>
+            </div>
+
+            <!-- 右侧区域 (天气 + 收藏) -->
+            <div class="lg:col-span-1">
+                <!-- 天气模块 -->
+                <section id="weather" class="bg-white rounded-xl card-shadow p-6 mb-6">
+                    <div class="flex justify-between items-center mb-6">
+                        <h3 class="text-xl font-bold flex items-center">
+                            <i class="fa fa-cloud text-primary mr-2"></i> 天气
+                        </h3>
+                        <button id="refreshWeather" class="text-neutral hover:text-primary">
+                            <i class="fa fa-refresh"></i>
+                        </button>
+                    </div>
+                    
+                    <!-- 当前天气 -->
+                    <div class="text-center mb-6">
+                        <div class="text-5xl mb-2" id="weatherIcon">
+                            <i class="fa fa-sun-o text-accent"></i>
+                        </div>
+                        <div class="text-3xl font-bold" id="temperature">22°C</div>
+                        <div class="text-neutral mt-1" id="weatherDesc">晴</div>
+                        <div class="text-sm text-neutral mt-2" id="location">北京市</div>
+                    </div>
+                    
+                    <!-- 未来几天预报 -->
+                    <div id="forecastList" class="space-y-3">
+                        <div class="flex justify-between items-center p-2">
+                            <span>周六</span>
+                            <div class="flex items-center">
+                                <i class="fa fa-cloud-sun text-accent mr-2"></i>
+                                <span>18-25°C</span>
+                            </div>
+                        </div>
+                        <div class="flex justify-between items-center p-2">
+                            <span>周日</span>
+                            <div class="flex items-center">
+                                <i class="fa fa-cloud text-neutral mr-2"></i>
+                                <span>16-22°C</span>
+                            </div>
+                        </div>
+                        <div class="flex justify-between items-center p-2">
+                            <span>周一</span>
+                            <div class="flex items-center">
+                                <i class="fa fa-rain text-blue-400 mr-2"></i>
+                                <span>14-20°C</span>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- 收藏模块 -->
+                <section id="favorites" class="bg-white rounded-xl card-shadow p-6">
+                    <div class="flex justify-between items-center mb-6">
+                        <h3 class="text-xl font-bold flex items-center">
+                            <i class="fa fa-star text-accent mr-2"></i> 收藏
+                        </h3>
+                        <button id="addFavoriteBtn" class="text-primary hover:text-primary/80">
+                            <i class="fa fa-plus-circle"></i>
+                        </button>
+                    </div>
+                    
+                    <!-- 收藏分类 -->
+                    <div class="flex mb-4 overflow-x-auto gap-2 pb-2">
+                        <button class="whitespace-nowrap px-4 py-1 rounded-full bg-primary text-white">全部</button>
+                        <button class="whitespace-nowrap px-4 py-1 rounded-full bg-gray-100 hover:bg-gray-200">网站</button>
+                        <button class="whitespace-nowrap px-4 py-1 rounded-full bg-gray-100 hover:bg-gray-200">文章</button>
+                        <button class="whitespace-nowrap px-4 py-1 rounded-full bg-gray-100 hover:bg-gray-200">图片</button>
+                    </div>
+                    
+                    <!-- 收藏列表 -->
+                    <div id="favoritesList" class="space-y-3">
+                        <a href="#" class="flex items-center p-3 rounded-lg hover:bg-gray-50 transition">
+                            <div class="w-10 h-10 rounded bg-blue-100 flex items-center justify-center text-blue-500 mr-3">
+                                <i class="fa fa-globe"></i>
+                            </div>
+                            <div class="flex-1 min-w-0">
+                                <h4 class="font-medium truncate">MDN Web 文档</h4>
+                                <p class="text-sm text-neutral truncate">developer.mozilla.org</p>
+                            </div>
+                            <button class="text-neutral hover:text-red-500 ml-2">
+                                <i class="fa fa-times"></i>
+                            </button>
+                        </a>
+                        <a href="#" class="flex items-center p-3 rounded-lg hover:bg-gray-50 transition">
+                            <div class="w-10 h-10 rounded bg-green-100 flex items-center justify-center text-green-500 mr-3">
+                                <i class="fa fa-book"></i>
+                            </div>
+                            <div class="flex-1 min-w-0">
+                                <h4 class="font-medium truncate">JavaScript 高级程序设计</h4>
+                                <p class="text-sm text-neutral truncate">编程学习笔记</p>
+                            </div>
+                            <button class="text-neutral hover:text-red-500 ml-2">
+                                <i class="fa fa-times"></i>
+                            </button>
+                        </a>
+                        <a href="#" class="flex items-center p-3 rounded-lg hover:bg-gray-50 transition">
+                            <div class="w-10 h-10 rounded bg-purple-100 flex items-center justify-center text-purple-500 mr-3">
+                                <i class="fa fa-code"></i>
+                            </div>
+                            <div class="flex-1 min-w-0">
+                                <h4 class="font-medium truncate">GitHub</h4>
+                                <p class="text-sm text-neutral truncate">github.com</p>
+                            </div>
+                            <button class="text-neutral hover:text-red-500 ml-2">
+                                <i class="fa fa-times"></i>
+                            </button>
+                        </a>
+                    </div>
+                </section>
+            </div>
+        </div>
+    </main>
+
+    <!-- 页脚 -->
+    <footer class="bg-dark text-white mt-12 py-8">
+        <div class="container mx-auto px-4 text-center">
+            <p>© 2026 我的个人空间 - 记录生活的每一刻</p>
+            <div class="mt-4 flex justify-center gap-4 text-xl">
+                <a href="#" class="hover:text-primary transition"><i class="fa fa-github"></i></a>
+                <a href="#" class="hover:text-primary transition"><i class="fa fa-weixin"></i></a>
+                <a href="#" class="hover:text-primary transition"><i class="fa fa-envelope"></i></a>
+            </div>
+        </div>
+    </footer>
+
+    <!-- 日记编辑模态框 -->
+    <div id="diaryModal" class="fixed inset-0 bg-black/50 flex items-center justify-center z-50 hidden">
+        <div class="bg-white rounded-xl w-full max-w-2xl max-h-[90vh] overflow-auto p-6">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-xl font-bold">写日记</h3>
+                <button id="closeDiaryModal" class="text-neutral hover:text-dark">
+                    <i class="fa fa-times text-xl"></i>
+                </button>
+            </div>
+            <div class="space-y-4">
+                <input type="text" id="diaryTitleInput" placeholder="输入标题..." class="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/50">
+                <textarea id="diaryContentInput" rows="8" placeholder="记录今天的心情和经历..." class="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/50"></textarea>
+                <button id="saveDiaryBtn" class="bg-primary text-white px-6 py-2 rounded-lg hover:bg-primary/90 transition">
+                    保存日记
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 添加打卡目标模态框 -->
+    <div id="checkinModal" class="fixed inset-0 bg-black/50 flex items-center justify-center z-50 hidden">
+        <div class="bg-white rounded-xl w-full max-w-md p-6">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-xl font-bold">添加打卡目标</h3>
+                <button id="closeCheckinModal" class="text-neutral hover:text-dark">
+                    <i class="fa fa-times text-xl"></i>
+                </button>
+            </div>
+            <div class="space-y-4">
+                <input type="text" id="checkinGoalInput" placeholder="例如：每日阅读30分钟..." class="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-secondary/50">
+                <button id="saveCheckinBtn" class="bg-secondary text-white px-6 py-2 rounded-lg hover:bg-secondary/90 transition">
+                    添加目标
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 添加收藏模态框 -->
+    <div id="favoriteModal" class="fixed inset-0 bg-black/50 flex items-center justify-center z-50 hidden">
+        <div class="bg-white rounded-xl w-full max-w-md p-6">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-xl font-bold">添加收藏</h3>
+                <button id="closeFavoriteModal" class="text-neutral hover:text-dark">
+                    <i class="fa fa-times text-xl"></i>
+                </button>
+            </div>
+            <div class="space-y-4">
+                <input type="text" id="favoriteNameInput" placeholder="收藏名称..." class="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-accent/50">
+                <input type="text" id="favoriteUrlInput" placeholder="网址/描述..." class="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-accent/50">
+                <div class="flex gap-2">
+                    <select id="favoriteCategorySelect" class="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-accent/50">
+                        <option value="网站">网站</option>
+                        <option value="文章">文章</option>
+                        <option value="图片">图片</option>
+                    </select>
+                </div>
+                <button id="saveFavoriteBtn" class="bg-accent text-white px-6 py-2 rounded-lg hover:bg-accent/90 transition">
+                    添加收藏
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 全局变量
+        let currentDate = new Date();
+        let currentYear = currentDate.getFullYear();
+        let currentMonth = currentDate.getMonth();
+
+        // DOM加载完成后执行
+        document.addEventListener('DOMContentLoaded', function() {
+            // 初始化当前日期显示
+            updateCurrentDateDisplay();
+            
+            // 初始化日历
+            renderCalendar(currentYear, currentMonth);
+            
+            // 初始化打卡统计图表
+            initCheckinChart();
+            
+            // 移动端菜单切换
+            const mobileMenuBtn = document.getElementById('mobileMenuBtn');
+            const mobileMenu = document.getElementById('mobileMenu');
+            mobileMenuBtn.addEventListener('click', function() {
+                mobileMenu.classList.toggle('hidden');
+            });
+            
+            // 导航标签切换
+            const navTabs = document.querySelectorAll('.nav-tab');
+            navTabs.forEach(tab => {
+                tab.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    // 移除所有激活状态
+                    navTabs.forEach(t => t.classList.remove('active-tab'));
+                    // 添加当前激活状态
+                    this.classList.add('active-tab');
+                    // 滚动到对应区域
+                    const targetId = this.getAttribute('href').substring(1);
+                    const targetElement = document.getElementById(targetId);
+                    if (targetElement) {
+                        targetElement.scrollIntoView({ behavior: 'smooth' });
+                    }
+                    // 关闭移动端菜单
+                    mobileMenu.classList.add('hidden');
+                });
+            });
+            
+            // 日记模态框操作
+            const newDiaryBtn = document.getElementById('newDiaryBtn');
+            const diaryModal = document.getElementById('diaryModal');
+            const closeDiaryModal = document.getElementById('closeDiaryModal');
+            const saveDiaryBtn = document.getElementById('saveDiaryBtn');
+            
+            newDiaryBtn.addEventListener('click', function() {
+                diaryModal.classList.remove('hidden');
+            });
+            
+            closeDiaryModal.addEventListener('click', function() {
+                diaryModal.classList.add('hidden');
+            });
+            
+            saveDiaryBtn.addEventListener('click', function() {
+                const title = document.getElementById('diaryTitleInput').value;
+                const content = document.getElementById('diaryContentInput').value;
+                
+                if (title && content) {
+                    // 创建新日记项
+                    const diaryList = document.getElementById('diaryList');
+                    const newDiary = document.createElement('div');
+                    newDiary.className = 'p-4 border border-gray-100 rounded-lg hover:shadow-md transition';
+                    newDiary.innerHTML = `
+                        <div class="flex justify-between items-center mb-2">
+                            <h4 class="font-medium">${title}</h4>
+                            <span class="text-sm text-neutral">${formatDate(currentDate)}</span>
+                        </div>
+                        <p class="text-neutral line-clamp-2">${content}</p>
+                        <button class="mt-2 text-primary text-sm">查看全文 <i class="fa fa-angle-right"></i></button>
+                    `;
+                    
+                    // 添加到列表顶部
+                    diaryList.insertBefore(newDiary, diaryList.firstChild);
+                    
+                    // 清空输入框并关闭模态框
+                    document.getElementById('diaryTitleInput').value = '';
+                    document.getElementById('diaryContentInput').value = '';
+                    diaryModal.classList.add('hidden');
+                    
+                    // 提示成功
+                    alert('日记保存成功！');
+                } else {
+                    alert('请输入标题和内容！');
+                }
+            });
+            
+            // 打卡目标模态框操作
+            const addCheckinGoal = document.getElementById('addCheckinGoal');
+            const checkinModal = document.getElementById('checkinModal');
+            const closeCheckinModal = document.getElementById('closeCheckinModal');
+            const saveCheckinBtn = document.getElementById('saveCheckinBtn');
+            
+            addCheckinGoal.addEventListener('click', function() {
+                checkinModal.classList.remove('hidden');
+            });
+            
+            closeCheckinModal.addEventListener('click', function() {
+                checkinModal.classList.add('hidden');
+            });
+            
+            saveCheckinBtn.addEventListener('click', function() {
+                const goalText = document.getElementById('checkinGoalInput').value;
+                
+                if (goalText) {
+                    // 创建新打卡目标
+                    const checkinGoalsList = document.getElementById('checkinGoalsList');
+                    const newGoal = document.createElement('div');
+                    newGoal.className = 'flex items-center justify-between p-3 border-b border-gray-100';
+                    newGoal.innerHTML = `
+                        <div class="flex items-center">
+                            <input type="checkbox" class="checkin-checkbox w-5 h-5 rounded text-secondary">
+                            <span class="ml-3">${goalText}</span>
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <span class="text-sm text-neutral">连续打卡: 0天</span>
+                            <button class="text-neutral hover:text-red-500">
+                                <i class="fa fa-trash-o"></i>
+                            </button>
+                        </div>
+                    `;
+                    
+                    // 添加到列表
+                    checkinGoalsList.appendChild(newGoal);
+                    
+                    // 清空输入框并关闭模态框
+                    document.getElementById('checkinGoalInput').value = '';
+                    checkinModal.classList.add('hidden');
+                    
+                    // 更新打卡图表
+                    updateCheckinChart();
+                    
+                    // 提示成功
+                    alert('打卡目标添加成功！');
+                } else {
+                    alert('请输入打卡目标！');
+                }
+            });
+            
+            // 收藏模态框操作
+            const addFavoriteBtn = document.getElementById('addFavoriteBtn');
+            const favoriteModal = document.getElementById('favoriteModal');
+            const closeFavoriteModal = document.getElementById('closeFavoriteModal');
+            const saveFavoriteBtn = document.getElementById('saveFavoriteBtn');
+            
+            addFavoriteBtn.addEventListener('click', function() {
+                favoriteModal.classList.remove('hidden');
+            });
+            
+            closeFavoriteModal.addEventListener('click', function() {
+                favoriteModal.classList.add('hidden');
+            });
+            
+            saveFavoriteBtn.addEventListener('click', function() {
+                const name = document.getElementById('favoriteNameInput').value;
+                const url = document.getElementById('favoriteUrlInput').value;
+                const category = document.getElementById('favoriteCategorySelect').value;
+                
+                if (name) {
+                    // 图标映射
+                    const iconMap = {
+                        '网站': 'fa-globe text-blue-500 bg-blue-100',
+                        '文章': 'fa-book text-green-500 bg-green-100',
+                        '图片': 'fa-picture-o text-purple-500 bg-purple-100'
+                    };
+                    
+                    const iconClass = iconMap[category] || 'fa-link text-gray-500 bg-gray-100';
+                    
+                    // 创建新收藏项
+                    const favoritesList = document.getElementById('favoritesList');
+                    const newFavorite = document.createElement('a');
+                    newFavorite.href = url || '#';
+                    newFavorite.className = 'flex items-center p-3 rounded-lg hover:bg-gray-50 transition';
+                    newFavorite.innerHTML = `
+                        <div class="w-10 h-10 rounded ${iconClass.split(' ')[2]} flex items-center justify-center ${iconClass.split(' ')[1]} mr-3">
+                            <i class="fa ${iconClass.split(' ')[0]}"></i>
+                        </div>
+                        <div class="flex-1 min-w-0">
+                            <h4 class="font-medium truncate">${name}</h4>
+                            <p class="text-sm text-neutral truncate">${url || category}</p>
+                        </div>
+                        <button class="text-neutral hover:text-red-500 ml-2">
+                            <i class="fa fa-times"></i>
+                        </button>
+                    `;
+                    
+                    // 添加到列表顶部
+                    favoritesList.insertBefore(newFavorite, favoritesList.firstChild);
+                    
+                    // 清空输入框并关闭模态框
+                    document.getElementById('favoriteNameInput').value = '';
+                    document.getElementById('favoriteUrlInput').value = '';
+                    favoriteModal.classList.add('hidden');
+                    
+                    // 提示成功
+                    alert('收藏添加成功！');
+                } else {
+                    alert('请输入收藏名称！');
+                }
+            });
+            
+            // 日历月份切换
+            document.getElementById('prevMonth').addEventListener('click', function() {
+                currentMonth--;
+                if (currentMonth < 0) {
+                    currentMonth = 11;
+                    currentYear--;
+                }
+                renderCalendar(currentYear, currentMonth);
+            });
+            
+            document.getElementById('nextMonth').addEventListener('click', function() {
+                currentMonth++;
+                if (currentMonth > 11) {
+                    currentMonth = 0;
+                    currentYear++;
+                }
+                renderCalendar(currentYear, currentMonth);
+            });
+            
+            // 点击模态框外部关闭
+            window.addEventListener('click', function(e) {
+                if (e.target === diaryModal) diaryModal.classList.add('hidden');
+                if (e.target === checkinModal) checkinModal.classList.add('hidden');
+                if (e.target === favoriteModal) favoriteModal.classList.add('hidden');
+            });
+            
+            // 打卡复选框事件
+            document.addEventListener('change', function(e) {
+                if (e.target.classList.contains('checkin-checkbox')) {
+                    updateCheckinChart();
+                }
+            });
+            
+            // 刷新天气按钮
+            document.getElementById('refreshWeather').addEventListener('click', function() {
+                // 模拟刷新天气
+                this.innerHTML = '<i class="fa fa-spinner fa-spin"></i>';
+                setTimeout(() => {
+                    this.innerHTML = '<i class="fa fa-refresh"></i>';
+                    alert('天气已更新！');
+                }, 1000);
+            });
+        });
+
+        // 更新当前日期显示
+        function updateCurrentDateDisplay() {
+            const now = new Date();
+            const dateOptions = { year: 'numeric', month: 'numeric', day: 'numeric' };
+            const weekdayOptions = { weekday: 'long' };
+            
+            document.getElementById('currentDate').textContent = now.toLocaleDateString('zh-CN', dateOptions);
+            document.getElementById('currentWeekday').textContent = now.toLocaleDateString('zh-CN', weekdayOptions);
+            
+            // 更新欢迎文本
+            const hour = now.getHours();
+            let welcomeText = '';
+            if (hour < 6) {
+                welcomeText = '凌晨好，夜猫子该休息了 😴';
+            } else if (hour < 9) {
+                welcomeText = '早上好，新的一天开始了 🌞';
+            } else if (hour < 12) {
+                welcomeText = '上午好，专注工作和学习吧 📚';
+            } else if (hour < 14) {
+                welcomeText = '中午好，记得吃午饭哦 🍚';
+            } else if (hour < 18) {
+                welcomeText = '下午好，继续加油 💪';
+            } else if (hour < 22) {
+                welcomeText = '晚上好，放松一下吧 🛋️';
+            } else {
+                welcomeText = '夜深了，早点休息吧 😊';
+            }
+            document.getElementById('welcomeText').textContent = welcomeText;
+        }
+
+        // 渲染日历
+        function renderCalendar(year, month) {
+            // 更新日历标题
+            const monthNames = ['1月', '2月', '3月', '4月', '5月', '6月', '7月', '8月', '9月', '10月', '11月', '12月'];
+            document.getElementById('calendarTitle').textContent = `${year}年${monthNames[month]}`;
+            
+            // 获取当月第一天
+            const firstDay = new Date(year, month, 1);
+            // 获取当月最后一天
+            const lastDay = new Date(year, month + 1, 0);
+            // 当月天数
+            const daysInMonth = lastDay.getDate();
+            // 第一天是星期几 (0-6)
+            const firstDayWeekday = firstDay.getDay();
+            
+            // 清空日历网格
+            const calendarGrid = document.getElementById('calendarGrid');
+            calendarGrid.innerHTML = '';
+            
+            // 添加月初的空白格子
+            for (let i = 0; i < firstDayWeekday; i++) {
+                const emptyDay = document.createElement('div');
+                emptyDay.className = 'calendar-day flex items-center justify-center text-gray-100';
+                calendarGrid.appendChild(emptyDay);
+            }
+            
+            // 添加当月的日期
+            const today = new Date();
+            for (let day = 1; day <= daysInMonth; day++) {
+                const dayElement = document.createElement('div');
+                const currentDate = new Date(year, month, day);
+                
+                // 基础样式
+                let dayClass = 'calendar-day flex items-center justify-center rounded-lg cursor-pointer hover:bg-gray-100 transition';
+                
+                // 今天的样式
+                if (currentDate.getDate() === today.getDate() && 
+                    currentDate.getMonth() === today.getMonth() && 
+                    currentDate.getFullYear() === today.getFullYear()) {
+                    dayClass += ' bg-primary text-white font-medium';
+                }
+                
+                // 周末样式
+                const weekday = new Date(year, month, day).getDay();
+                if (weekday === 0 || weekday === 6) {
+                    dayClass += ' text-red-500';
+                    // 如果是今天且是周末，需要覆盖文字颜色
+                    if (currentDate.getDate() === today.getDate() && 
+                        currentDate.getMonth() === today.getMonth() && 
+                        currentDate.getFullYear() === today.getFullYear()) {
+                        dayClass = dayClass.replace('text-red-500', 'text-white');
+                    }
+                }
+                
+                // 已打卡日期标记
+                if (day % 2 === 0) { // 模拟隔一天打卡
+                    dayClass += ' relative';
+                }
+                
+                dayElement.className = dayClass;
+                dayElement.textContent = day;
+                
+                // 添加打卡标记
+                if (day % 2 === 0) {
+                    const checkinMarker = document.createElement('div');
+                    checkinMarker.className = 'absolute bottom-1 w-1.5 h-1.5 bg-secondary rounded-full';
+                    dayElement.appendChild(checkinMarker);
+                }
+                
+                calendarGrid.appendChild(dayElement);
+            }
+        }
+
+        // 初始化打卡统计图表
+        function initCheckinChart() {
+            const ctx = document.getElementById('checkinChart').getContext('2d');
+            
+            // 模拟打卡数据
+            const checkinData = {
+                labels: ['1日', '2日', '3日', '4日', '5日', '6日', '7日'],
+                datasets: [{
+                    label: '打卡完成数',
+                    data: [1, 2, 1, 2, 2, 2, 2],
+                    backgroundColor: 'rgba(16, 185, 129, 0.6)',
+                    borderColor: 'rgba(16, 185, 129, 1)',
+                    borderWidth: 1,
+                    tension: 0.4
+                }]
+            };
+            
+            // 创建图表
+            window.checkinChart = new Chart(ctx, {
+                type: 'line',
+                data: checkinData,
+                options: {
+                    responsive: true,
+                    plugins: {
+                        legend: {
+                            position: 'top',
+                        },
+                        title: {
+                            display: true,
+                            text: '本周打卡统计'
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            max: 3,
+                            ticks: {
+                                stepSize: 1
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        // 更新打卡图表
+        function updateCheckinChart() {
+            // 获取所有打卡复选框
+            const checkboxes = document.querySelectorAll('.checkin-checkbox');
+            let checkedCount = 0;
+            
+            checkboxes.forEach(checkbox => {
+                if (checkbox.checked) checkedCount++;
+            });
+            
+            // 更新图表最后一个数据点
+            if (window.checkinChart) {
+                const data = window.checkinChart.data.datasets[0].data;
+                data[data.length - 1] = checkedCount;
+                window.checkinChart.update();
+            }
+        }
+
+        // 格式化日期
+        function formatDate(date) {
+            const year = date.getFullYear();
+            const month = String(date.getMonth() + 1).padStart(2, '0');
+            const day = String(date.getDate()).padStart(2, '0');
+            return `${year}-${month}-${day}`;
+        }
+    </script>
+</body>
+</html>
