@@ -1,0 +1,551 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>个人生活管理系统 | Mobile Ready</title>
+    <!-- 引入 Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- 引入 Vue 3 -->
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <!-- 引入 SheetJS -->
+    <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
+    <!-- 引入 Phosphor Icons -->
+    <script src="https://unpkg.com/@phosphor-icons/web"></script>
+
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background-color: #f3f4f6; }
+        .fade-enter-active, .fade-leave-active { transition: opacity 0.3s ease; }
+        .fade-enter-from, .fade-leave-to { opacity: 0; }
+        
+        /* 自定义滚动条 */
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: #f1f1f1; }
+        ::-webkit-scrollbar-thumb { background: #c1c1c1; border-radius: 4px; }
+        
+        /* 时间轴样式优化 */
+        .time-slot { min-height: 70px; border-bottom: 1px solid #e5e7eb; transition: background 0.2s; }
+        .time-slot:hover { background-color: #f9fafb; }
+        .time-input { 
+            width: 100%; 
+            height: 100%; 
+            border: none; 
+            background: transparent; 
+            padding: 8px 16px; 
+            font-size: 15px;
+            color: #1f2937;
+        }
+        .time-input:focus { outline: none; background-color: #fff; box-shadow: inset 0 0 0 2px #e0e7ff; border-radius: 4px; }
+        .time-label { font-size: 13px; color: #6b7280; font-weight: 600; }
+
+        /* 导航激活状态 */
+        .active-nav { background-color: #e0e7ff; color: #4338ca; border-right: 4px solid #4338ca; }
+        .active-nav-mobile { background-color: #e0e7ff; color: #4338ca; }
+
+        /* 移动端适配工具类 */
+        @media (max-width: 768px) {
+            .mobile-hidden { display: none; }
+            .mobile-block { display: block; }
+            .mobile-flex { display: flex; }
+            .sidebar-desktop { display: none; }
+            .bottom-nav-mobile { 
+                display: flex; 
+                position: fixed; 
+                bottom: 0; 
+                left: 0; 
+                right: 0; 
+                background: white; 
+                border-top: 1px solid #e5e7eb; 
+                z-index: 50;
+                justify-content: space-around;
+                padding-bottom: env(safe-area-inset-bottom); /* 适配 iPhone 底部横条 */
+            }
+            .main-content-mobile { padding-bottom: 70px; } /* 为底部导航留空间 */
+            .calendar-grid { grid-template-columns: repeat(7, 1fr); }
+        }
+        @media (min-width: 769px) {
+            .sidebar-desktop { display: flex; }
+            .bottom-nav-mobile { display: none; }
+            .main-content-mobile { padding-bottom: 0; }
+        }
+    </style>
+</head>
+<body class="text-gray-800">
+
+<div id="app" class="flex h-screen overflow-hidden">
+    
+    <!-- 桌面端侧边栏 -->
+    <aside class="sidebar-desktop w-64 bg-white shadow-lg flex-col z-20 flex-shrink-0">
+        <div class="p-6 text-center border-b bg-indigo-50">
+            <h1 class="text-xl font-bold text-indigo-700">🚀 我的生活系统</h1>
+            <p class="text-xs text-gray-500 mt-1">{{ currentDateStr }}</p>
+        </div>
+        <nav class="flex-1 overflow-y-auto py-4">
+            <a v-for="item in navItems" :key="item.id" 
+               @click="currentTab = item.id"
+               :class="['flex items-center px-6 py-4 cursor-pointer transition-colors hover:bg-gray-50', currentTab === item.id ? 'active-nav' : 'text-gray-600']">
+                <i :class="['ph text-xl mr-3', item.icon]"></i>
+                <span class="font-medium">{{ item.name }}</span>
+            </a>
+        </nav>
+    </aside>
+
+    <!-- 主内容区域 -->
+    <main class="flex-1 overflow-y-auto relative main-content-mobile bg-gray-50" id="main-scroll">
+        
+        <!-- 顶部标题栏 (仅移动端显示) -->
+        <div class="md:hidden bg-white p-4 shadow-sm sticky top-0 z-10 flex justify-between items-center">
+            <h1 class="text-lg font-bold text-indigo-700">我的生活系统</h1>
+            <span class="text-xs text-gray-500">{{ currentDateStrShort }}</span>
+        </div>
+
+        <div class="p-4 md:p-8 max-w-7xl mx-auto">
+            
+            <!-- 1. 日历页面 -->
+            <div v-if="currentTab === 'calendar'" class="animate-fade">
+                <div class="flex flex-col md:flex-row justify-between items-center mb-6 gap-4">
+                    <h2 class="text-2xl font-bold text-gray-800">📅 智能日历</h2>
+                    <div class="flex items-center gap-2 bg-white p-1 rounded-lg shadow-sm">
+                        <button @click="changeMonth(-1)" class="p-2 hover:bg-gray-100 rounded"><i class="ph ph-caret-left"></i></button>
+                        <span class="font-bold text-lg px-4">{{ calendarTitle }}</span>
+                        <button @click="changeMonth(1)" class="p-2 hover:bg-gray-100 rounded"><i class="ph ph-caret-right"></i></button>
+                    </div>
+                </div>
+
+                <!-- 添加事件表单 (移动端优化) -->
+                <div class="bg-white p-4 rounded-lg shadow mb-6 grid grid-cols-1 md:grid-cols-12 gap-3">
+                    <div class="md:col-span-3">
+                        <label class="block text-xs text-gray-500 mb-1">日期</label>
+                        <input type="date" v-model="newEvent.date" class="w-full border rounded p-2 text-sm">
+                    </div>
+                    <div class="md:col-span-5">
+                        <label class="block text-xs text-gray-500 mb-1">事项</label>
+                        <input type="text" v-model="newEvent.title" placeholder="输入事项..." class="w-full border rounded p-2 text-sm">
+                    </div>
+                    <div class="md:col-span-2">
+                        <label class="block text-xs text-gray-500 mb-1">类型</label>
+                        <select v-model="newEvent.type" class="w-full border rounded p-2 text-sm">
+                            <option value="normal">普通</option>
+                            <option value="work">工作</option>
+                            <option value="holiday">假日</option>
+                            <option value="urgent">⚠️ 重要</option>
+                        </select>
+                    </div>
+                    <div class="md:col-span-2 flex items-end">
+                        <button @click="addEvent" class="w-full bg-indigo-600 text-white p-2 rounded hover:bg-indigo-700 text-sm font-bold">添加</button>
+                    </div>
+                </div>
+
+                <!-- 日历网格 -->
+                <div class="bg-white rounded-lg shadow overflow-hidden">
+                    <div class="grid grid-cols-7 bg-gray-100 border-b">
+                        <div v-for="day in ['日','一','二','三','四','五','六']" class="py-2 text-center text-xs font-bold text-gray-500">
+                            {{ day }}
+                        </div>
+                    </div>
+                    <div class="grid grid-cols-7 gap-px bg-gray-200">
+                        <div v-for="n in emptyDays" :key="'empty-'+n" class="bg-white min-h-[80px] md:min-h-[120px]"></div>
+                        
+                        <div v-for="day in daysInMonth" :key="day.dateStr" 
+                             class="bg-white min-h-[80px] md:min-h-[120px] p-1 md:p-2 hover:bg-indigo-50 transition relative group"
+                             :class="{'bg-blue-50': isToday(day.dateStr)}">
+                            <div class="flex justify-between items-start mb-1">
+                                <span class="text-xs md:text-sm font-semibold w-6 h-6 flex items-center justify-center rounded-full" 
+                                      :class="isToday(day.dateStr) ? 'bg-indigo-600 text-white' : 'text-gray-700'">
+                                    {{ day.day }}
+                                </span>
+                                <button @click="deleteEventsOnDay(day.dateStr)" class="text-red-300 hover:text-red-500 opacity-0 group-hover:opacity-100 text-xs md:hidden">×</button>
+                            </div>
+                            
+                            <div class="space-y-1 overflow-y-auto max-h-[60px] md:max-h-none">
+                                <div v-for="evt in getEventsForDay(day.dateStr)" :key="evt.id" 
+                                     class="text-[10px] md:text-xs p-1 rounded truncate cursor-pointer border-l-2"
+                                     :class="getEventColorClass(evt.type)"
+                                     :title="evt.title">
+                                    {{ evt.title }}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 2. 日记页面 -->
+            <div v-if="currentTab === 'diary'" class="animate-fade">
+                <div class="flex justify-between items-center mb-6">
+                    <h2 class="text-2xl font-bold text-gray-800">📝 私人日记</h2>
+                    <button @click="exportDiaryToExcel" class="flex items-center gap-2 bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700 shadow text-sm">
+                        <i class="ph ph-file-xls"></i> <span class="hidden md:inline">导出 Excel</span><span class="md:hidden">导出</span>
+                    </button>
+                </div>
+
+                <div class="bg-white rounded-lg shadow p-4 md:p-6 mb-8">
+                    <div class="mb-4">
+                        <label class="block text-sm font-medium text-gray-700 mb-1">选择日期</label>
+                        <input type="date" v-model="currentDiaryDate" class="block w-full border-gray-300 rounded-md shadow-sm border p-2">
+                    </div>
+                    <textarea v-model="currentDiaryContent" @input="saveDiary" rows="12" 
+                              class="w-full border rounded-md p-4 focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none text-base leading-relaxed"
+                              placeholder="今天发生了什么？写下你的想法..."></textarea>
+                    <div class="mt-2 text-right text-xs text-gray-400">
+                        <i class="ph ph-check-circle"></i> 自动保存
+                    </div>
+                </div>
+
+                <h3 class="text-lg font-bold text-gray-700 mb-4">历史记录</h3>
+                <div class="space-y-3">
+                    <div v-for="(content, date) in sortedDiaries" :key="date" 
+                         @click="loadDiary(date)"
+                         class="bg-white p-4 rounded shadow cursor-pointer hover:shadow-md transition flex justify-between items-center">
+                        <div class="overflow-hidden">
+                            <div class="font-bold text-indigo-600">{{ date }}</div>
+                            <div class="text-gray-600 text-sm truncate">{{ content.substring(0, 60) }}...</div>
+                        </div>
+                        <i class="ph ph-caret-right text-gray-300"></i>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 3. 每日打卡 -->
+            <div v-if="currentTab === 'habit'" class="animate-fade">
+                <h2 class="text-2xl font-bold text-gray-800 mb-6">✅ 习惯打卡</h2>
+                
+                <div class="flex gap-2 mb-8">
+                    <input v-model="newHabitName" @keyup.enter="addHabit" type="text" placeholder="新习惯 (如：早起)" class="flex-1 border rounded p-3 shadow-sm">
+                    <button @click="addHabit" class="bg-indigo-600 text-white px-6 rounded hover:bg-indigo-700 font-bold">+</button>
+                </div>
+
+                <div class="bg-white rounded-lg shadow overflow-hidden">
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-left min-w-[600px]">
+                            <thead class="bg-gray-50 border-b">
+                                <tr>
+                                    <th class="p-4 font-semibold text-gray-600">习惯名称</th>
+                                    <th class="p-4 font-semibold text-gray-600 text-center">今日状态</th>
+                                    <th class="p-4 font-semibold text-gray-600 text-right">连续天数</th>
+                                    <th class="p-4 w-10"></th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr v-for="habit in habits" :key="habit.id" class="border-b hover:bg-gray-50">
+                                    <td class="p-4 font-medium text-lg">{{ habit.name }}</td>
+                                    <td class="p-4 text-center">
+                                        <button @click="toggleHabit(habit.id)" 
+                                                class="px-6 py-2 rounded-full text-sm font-bold transition-all transform active:scale-95"
+                                                :class="isHabitDoneToday(habit.id) ? 'bg-green-500 text-white shadow-lg shadow-green-200' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'">
+                                            {{ isHabitDoneToday(habit.id) ? '已完成 🎉' : '打卡' }}
+                                        </button>
+                                    </td>
+                                    <td class="p-4 text-right text-indigo-600 font-bold text-lg">{{ getStreak(habit.id) }} <span class="text-xs text-gray-400 font-normal">天</span></td>
+                                    <td class="p-4 text-right">
+                                        <button @click="deleteHabit(habit.id)" class="text-red-300 hover:text-red-500 p-2"><i class="ph ph-trash text-xl"></i></button>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    <div v-if="habits.length === 0" class="p-8 text-center text-gray-400">
+                        暂无习惯，添加一个开始改变！
+                    </div>
+                </div>
+            </div>
+
+            <!-- 4. 时间规划 (重点优化：更宽的输入条) -->
+            <div v-if="currentTab === 'planner'" class="animate-fade">
+                <div class="flex flex-col md:flex-row justify-between items-center mb-6 gap-4">
+                    <h2 class="text-2xl font-bold text-gray-800">⏳ 时间规划</h2>
+                    <div class="flex bg-white rounded-lg shadow-sm p-1">
+                        <button @click="plannerView = 'year'" :class="['px-4 py-2 rounded text-sm font-medium transition', plannerView==='year'?'bg-indigo-100 text-indigo-700':'text-gray-500 hover:bg-gray-50']">年目标</button>
+                        <button @click="plannerView = 'month'" :class="['px-4 py-2 rounded text-sm font-medium transition', plannerView==='month'?'bg-indigo-100 text-indigo-700':'text-gray-500 hover:bg-gray-50']">月里程碑</button>
+                        <button @click="plannerView = 'day'" :class="['px-4 py-2 rounded text-sm font-medium transition', plannerView==='day'?'bg-indigo-100 text-indigo-700':'text-gray-500 hover:bg-gray-50']">日时间轴</button>
+                    </div>
+                </div>
+
+                <!-- 年视图 -->
+                <div v-if="plannerView === 'year'" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    <div v-for="m in 12" :key="m" class="bg-white p-4 rounded shadow hover:shadow-md transition">
+                        <h3 class="font-bold text-gray-700 mb-2 flex items-center gap-2">
+                            <span class="bg-indigo-100 text-indigo-700 w-6 h-6 rounded flex items-center justify-center text-xs">{{ m }}</span>
+                            月目标
+                        </h3>
+                        <textarea v-model="yearPlans[m]" @input="saveData" placeholder="本月重点..." class="w-full text-sm border rounded p-3 h-24 resize-none focus:ring-2 focus:ring-indigo-200 outline-none"></textarea>
+                    </div>
+                </div>
+
+                <!-- 月视图 -->
+                <div v-if="plannerView === 'month'" class="bg-white p-6 rounded shadow">
+                    <h3 class="font-bold text-gray-700 mb-6 border-b pb-2">年度里程碑</h3>
+                    <div class="space-y-4">
+                        <div v-for="m in 12" :key="m" class="flex flex-col md:flex-row md:items-center gap-2 md:gap-4">
+                            <span class="w-8 font-bold text-indigo-600 text-center bg-indigo-50 rounded py-1">{{ m }}月</span>
+                            <input v-model="monthPlans[m]" @input="saveData" type="text" class="flex-1 border-b border-gray-300 focus:border-indigo-500 outline-none py-2 px-2 text-gray-700" placeholder="本月关键事件...">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 日视图 (超宽输入条) -->
+                <div v-if="plannerView === 'day'" class="bg-white rounded shadow overflow-hidden flex flex-col h-[calc(100vh-140px)] md:h-auto">
+                    <div class="p-4 bg-indigo-50 border-b flex flex-col md:flex-row justify-between items-center gap-3">
+                        <h3 class="font-bold text-indigo-800"><i class="ph ph-clock"></i> 每日时间轴</h3>
+                        <input type="date" v-model="plannerDate" class="border rounded p-2 bg-white shadow-sm">
+                    </div>
+                    
+                    <div class="overflow-y-auto flex-1">
+                        <div v-for="hour in 24" :key="hour" class="flex time-slot group">
+                            <!-- 时间标签 -->
+                            <div class="w-16 md:w-24 flex-shrink-0 p-3 text-right border-r bg-gray-50 flex flex-col justify-center">
+                                <span class="time-label block">{{ hour.toString().padStart(2, '0') }}:00</span>
+                            </div>
+                            <!-- 超宽输入区域 -->
+                            <div class="flex-1 relative">
+                                <input 
+                                    v-model="dailySchedule[getKey(plannerDate, hour)]" 
+                                    @input="saveData"
+                                    type="text" 
+                                    class="time-input placeholder-gray-300"
+                                    placeholder="+ 点击输入该时段计划 (支持长文本)"
+                                >
+                                <!-- 悬停提示线 -->
+                                <div class="absolute left-0 top-0 bottom-0 w-1 bg-indigo-200 opacity-0 group-hover:opacity-100 transition-opacity"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 5. 网页收藏 -->
+            <div v-if="currentTab === 'bookmarks'" class="animate-fade">
+                <h2 class="text-2xl font-bold text-gray-800 mb-6">🔖 快速导航</h2>
+                
+                <div class="bg-white p-4 rounded-lg shadow mb-8 flex flex-col md:flex-row gap-3">
+                    <input v-model="newBookmark.title" type="text" placeholder="网站名称" class="flex-1 border rounded p-3">
+                    <input v-model="newBookmark.url" type="url" placeholder="https://..." class="flex-1 border rounded p-3">
+                    <select v-model="newBookmark.tag" class="border rounded p-3 bg-white">
+                        <option value="工作">💼 工作</option>
+                        <option value="学习">📚 学习</option>
+                        <option value="娱乐">🎮 娱乐</option>
+                        <option value="工具">🛠️ 工具</option>
+                    </select>
+                    <button @click="addBookmark" class="bg-indigo-600 text-white px-6 rounded hover:bg-indigo-700 font-bold">收藏</button>
+                </div>
+
+                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                    <div v-for="(bm, index) in bookmarks" :key="index" class="bg-white p-4 rounded-lg shadow hover:shadow-lg hover:-translate-y-1 transition duration-300 relative group border-l-4" :class="getBookmarkColor(bm.tag)">
+                        <div class="absolute top-3 right-3 opacity-0 group-hover:opacity-100 transition">
+                            <button @click="deleteBookmark(index)" class="text-gray-300 hover:text-red-500"><i class="ph ph-trash text-lg"></i></button>
+                        </div>
+                        <div class="text-xs font-bold uppercase mb-2 opacity-70">{{ bm.tag }}</div>
+                        <a :href="bm.url" target="_blank" class="block font-bold text-gray-800 hover:text-indigo-600 truncate mb-1 text-lg">{{ bm.title }}</a>
+                        <a :href="bm.url" target="_blank" class="text-xs text-gray-500 hover:underline truncate block">{{ bm.url }}</a>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </main>
+
+    <!-- 移动端底部导航栏 -->
+    <nav class="bottom-nav-mobile">
+        <a v-for="item in navItems" :key="item.id" 
+           @click="currentTab = item.id"
+           class="flex-1 flex flex-col items-center justify-center py-3 text-xs font-medium"
+           :class="currentTab === item.id ? 'active-nav-mobile' : 'text-gray-500'">
+            <i :class="['ph text-2xl mb-1', item.icon, currentTab === item.id ? 'text-indigo-600' : '']"></i>
+            {{ item.name }}
+        </a>
+    </nav>
+</div>
+
+<script>
+    const { createApp, ref, computed, onMounted, watch } = Vue;
+
+    createApp({
+        setup() {
+            const currentTab = ref('calendar');
+            const navItems = [
+                { id: 'calendar', name: '日历', icon: 'ph-calendar' },
+                { id: 'diary', name: '日记', icon: 'ph-book-open-text' },
+                { id: 'habit', name: '打卡', icon: 'ph-check-circle' },
+                { id: 'planner', name: '规划', icon: 'ph-clock-countdown' },
+                { id: 'bookmarks', name: '收藏', icon: 'ph-bookmarks' }
+            ];
+
+            const today = new Date();
+            const currentDateStr = ref(today.toLocaleDateString('zh-CN', { year: 'numeric', month: 'long', day: 'numeric', weekday: 'long' }));
+            const currentDateStrShort = ref(today.toLocaleDateString('zh-CN', { month: 'short', day: 'numeric' }));
+
+            // --- 1. 日历逻辑 ---
+            const calendarDate = ref(new Date());
+            const newEvent = ref({ date: '', title: '', type: 'normal' });
+            const events = ref([]);
+
+            const calendarTitle = computed(() => `${calendarDate.value.getFullYear()}年 ${calendarDate.value.getMonth() + 1}月`);
+            const emptyDays = computed(() => {
+                const firstDay = new Date(calendarDate.value.getFullYear(), calendarDate.value.getMonth(), 1);
+                return firstDay.getDay();
+            });
+            const daysInMonth = computed(() => {
+                const year = calendarDate.value.getFullYear();
+                const month = calendarDate.value.getMonth();
+                const days = new Date(year, month + 1, 0).getDate();
+                const result = [];
+                for (let i = 1; i <= days; i++) {
+                    const date = new Date(year, month, i);
+                    result.push({ day: i, dateStr: date.toISOString().split('T')[0] });
+                }
+                return result;
+            });
+
+            const changeMonth = (delta) => calendarDate.value.setMonth(calendarDate.value.getMonth() + delta);
+            const isToday = (dateStr) => dateStr === new Date().toISOString().split('T')[0];
+            
+            const getEventColorClass = (type) => {
+                const map = {
+                    'normal': 'bg-gray-100 text-gray-600 border-gray-300',
+                    'work': 'bg-blue-100 text-blue-700 border-blue-400',
+                    'holiday': 'bg-red-100 text-red-700 border-red-400',
+                    'urgent': 'bg-orange-100 text-orange-800 border-orange-500 font-bold'
+                };
+                return map[type] || map['normal'];
+            };
+
+            const getEventsForDay = (dateStr) => events.value.filter(e => e.date === dateStr);
+            const addEvent = () => {
+                if (!newEvent.value.date || !newEvent.value.title) return alert('请填写完整');
+                events.value.push({ id: Date.now(), ...newEvent.value });
+                saveData();
+                newEvent.value.title = '';
+            };
+            const deleteEventsOnDay = (dateStr) => {
+                if(confirm('清空该日事项？')) {
+                    events.value = events.value.filter(e => e.date !== dateStr);
+                    saveData();
+                }
+            };
+
+            // --- 2. 日记逻辑 ---
+            const diaries = ref({});
+            const currentDiaryDate = ref(new Date().toISOString().split('T')[0]);
+            const currentDiaryContent = ref('');
+            const sortedDiaries = computed(() => {
+                const entries = Object.entries(diaries.value);
+                entries.sort((a, b) => new Date(b[0]) - new Date(a[0]));
+                return Object.fromEntries(entries);
+            });
+            const loadDiary = (date) => { currentDiaryDate.value = date; currentDiaryContent.value = diaries.value[date] || ''; };
+            const saveDiary = () => {
+                if (currentDiaryContent.value.trim()) diaries.value[currentDiaryDate.value] = currentDiaryContent.value;
+                else delete diaries.value[currentDiaryDate.value];
+                saveData();
+            };
+            watch(currentDiaryDate, (d) => currentDiaryContent.value = diaries.value[d] || '');
+            
+            const exportDiaryToExcel = () => {
+                const data = Object.entries(diaries.value).map(([date, content]) => ({ '日期': date, '内容': content }));
+                if (!data.length) return alert('无数据');
+                const ws = XLSX.utils.json_to_sheet(data);
+                const wb = XLSX.utils.book_new();
+                XLSX.utils.book_append_sheet(wb, ws, "日记");
+                XLSX.writeFile(wb, `日记_${new Date().toISOString().slice(0,10)}.xlsx`);
+            };
+
+            // --- 3. 打卡逻辑 ---
+            const habits = ref([]);
+            const habitLogs = ref({});
+            const newHabitName = ref('');
+            const todayStr = new Date().toISOString().split('T')[0];
+
+            const addHabit = () => {
+                if (!newHabitName.value.trim()) return;
+                habits.value.push({ id: Date.now(), name: newHabitName.value });
+                newHabitName.value = '';
+                saveData();
+            };
+            const deleteHabit = (id) => { habits.value = habits.value.filter(h => h.id !== id); saveData(); };
+            const isHabitDoneToday = (id) => !!habitLogs.value[`${id}_${todayStr}`];
+            const toggleHabit = (id) => {
+                const key = `${id}_${todayStr}`;
+                habitLogs.value[key] ? delete habitLogs.value[key] : habitLogs.value[key] = true;
+                saveData();
+            };
+            const getStreak = (id) => {
+                let streak = 0, d = new Date();
+                while (true) {
+                    const ds = d.toISOString().split('T')[0];
+                    if (habitLogs.value[`${id}_${ds}`]) { streak++; d.setDate(d.getDate()-1); }
+                    else {
+                        if (ds === todayStr && !habitLogs.value[`${id}_${ds}`]) { d.setDate(d.getDate()-1); continue; }
+                        break;
+                    }
+                }
+                return streak;
+            };
+
+            // --- 4. 规划逻辑 ---
+            const plannerView = ref('day');
+            const plannerDate = ref(todayStr);
+            const yearPlans = ref({}), monthPlans = ref({}), dailySchedule = ref({});
+            const getKey = (d, h) => `${d}_${h}`;
+
+            // --- 5. 收藏逻辑 ---
+            const bookmarks = ref([]);
+            const newBookmark = ref({ title: '', url: '', tag: '工作' });
+            const getBookmarkColor = (tag) => {
+                const map = { '工作': 'border-blue-500', '学习': 'border-green-500', '娱乐': 'border-purple-500', '工具': 'border-gray-500' };
+                return map[tag] || 'border-gray-300';
+            };
+            const addBookmark = () => {
+                if (!newBookmark.value.title || !newBookmark.value.url) return alert('请填写完整');
+                bookmarks.value.push({ ...newBookmark.value });
+                newBookmark.value = { title: '', url: '', tag: '工作' };
+                saveData();
+            };
+            const deleteBookmark = (i) => { bookmarks.value.splice(i, 1); saveData(); };
+
+            // --- 持久化 ---
+            const saveData = () => {
+                localStorage.setItem('lifeOS_v2', JSON.stringify({
+                    events: events.value, diaries: diaries.value, habits: habits.value,
+                    habitLogs: habitLogs.value, yearPlans: yearPlans.value,
+                    monthPlans: monthPlans.value, dailySchedule: dailySchedule.value,
+                    bookmarks: bookmarks.value
+                }));
+            };
+            const loadData = () => {
+                const raw = localStorage.getItem('lifeOS_v2');
+                if (raw) {
+                    const d = JSON.parse(raw);
+                    events.value = d.events || []; diaries.value = d.diaries || {};
+                    habits.value = d.habits || []; habitLogs.value = d.habitLogs || {};
+                    yearPlans.value = d.yearPlans || {}; monthPlans.value = d.monthPlans || {};
+                    dailySchedule.value = d.dailySchedule || {}; bookmarks.value = d.bookmarks || [];
+                    currentDiaryContent.value = diaries.value[currentDiaryDate.value] || '';
+                }
+                newEvent.value.date = todayStr;
+            };
+
+            onMounted(() => {
+                loadData();
+                // 简单的移动端滚动优化
+                if(window.innerWidth < 768) {
+                    document.getElementById('main-scroll').addEventListener('scroll', (e) => {
+                        // 防止底部导航遮挡内容，这里主要靠 padding-bottom 解决
+                    });
+                }
+            });
+
+            return {
+                currentTab, navItems, currentDateStr, currentDateStrShort,
+                calendarDate, calendarTitle, emptyDays, daysInMonth, changeMonth, isToday,
+                newEvent, addEvent, getEventsForDay, getEventColorClass, deleteEventsOnDay,
+                diaries, currentDiaryDate, currentDiaryContent, sortedDiaries, loadDiary, saveDiary, exportDiaryToExcel,
+                habits, newHabitName, addHabit, deleteHabit, isHabitDoneToday, toggleHabit, getStreak,
+                plannerView, plannerDate, yearPlans, monthPlans, dailySchedule, getKey,
+                bookmarks, newBookmark, addBookmark, deleteBookmark, getBookmarkColor,
+                saveData
+            };
+        }
+    }).mount('#app');
+</script>
+</body>
+</html>
